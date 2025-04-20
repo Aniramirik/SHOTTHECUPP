@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>🎯 Cup Shot: Shooter vs Blocker</title>
+  <style>
+    body { font-family: Arial,sans-serif; display:flex;align-items:center;justify-content:center;
+           min-height:100vh;margin:0;background:#f4f4f9 }
+    .container { background:#fff; padding:20px; border-radius:8px;
+                 box-shadow:0 4px 12px rgba(0,0,0,0.1); width:320px; text-align:center }
+    input,select,button { width:100%; padding:10px; margin:8px 0; font-size:16px;
+                          border:1px solid #ddd; border-radius:4px; box-sizing:border-box }
+    button { background:#4CAF50; color:#fff; border:none; cursor:pointer; transition:.2s }
+    button:hover { background:#45a049 }
+    #gameArea { display:none; margin-top:10px }
+    #statusMessage { height:1.2em; color:green }
+    #gameStatus,#scores { margin:12px 0; font-weight:bold }
+    #blockButtons button { background:#2196F3 }
+    #blockButtons button:hover { background:#1976d2 }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Lobby -->
+    <div id="lobby">
+      <h2>🏆 Cup Shot</h2>
+      <input id="roomCodeInput" placeholder="Room code…">
+      <button id="createRoomBtn">Create Room</button>
+      <button id="joinRoomBtn">Join Room</button>
+      <p id="statusMessage"></p>
+    </div>
+
+    <!-- Game Area -->
+    <div id="gameArea">
+      <p id="gameStatus">Waiting…</p>
+
+      <!-- Shooter UI -->
+      <div id="shooterUI">
+        <input id="messageInput" placeholder="If this goes in…">
+        <select id="targetCup">
+          <option value="left">Left Cup</option>
+          <option value="right">Right Cup</option>
+        </select>
+        <button id="shootButton">Shoot!</button>
+      </div>
+
+      <!-- Blocker UI -->
+      <div id="blockButtons" style="display:none;">
+        <button data-guess="left">Block Left Cup</button>
+        <button data-guess="right">Block Right Cup</button>
+      </div>
+
+      <button id="resetButton" style="background:#FF5722;">Reset Game</button>
+
+      <div id="scores">
+        Player 1: <span id="player1Score">0</span> | Player 2: <span id="player2Score">0</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase compat -->
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+  <script>
+    // 1) Init Firebase
+    const cfg = {
+      apiKey: "AIzaSyDEhC4JZ0zrt1ObPOQZgygFNWIJqvMVrCk",
+      authDomain: "web2web-be83b.firebaseapp.com",
+      databaseURL: "https://web2web-be83b-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "web2web-be83b",
+      storageBucket: "web2web-be83b.firebasestorage.app",
+      messagingSenderId: "713313536557",
+      appId: "1:713313536557:web:a93adf1478d6cf76cc06a4",
+      measurementId: "G-PYV2XD9P8B"
+    };
+    firebase.initializeApp(cfg);
+    const db = firebase.database();
+
+    // 2) Client ID (to track role)
+    let clientId = localStorage.getItem('clientId');
+    if (!clientId) {
+      clientId = Date.now() + '_' + Math.random().toString(36).slice(2);
+      localStorage.setItem('clientId', clientId);
+    }
+
+    // 3) DOM refs
+    const roomInput   = document.getElementById('roomCodeInput');
+    const createBtn   = document.getElementById('createRoomBtn');
+    const joinBtn     = document.getElementById('joinRoomBtn');
+    const statusMsg   = document.getElementById('statusMessage');
+    const lobby       = document.getElementById('lobby');
+    const gameArea    = document.getElementById('gameArea');
+    const shooterUI   = document.getElementById('shooterUI');
+    const blockButtons= document.getElementById('blockButtons');
+    const shootBtn    = document.getElementById('shootButton');
+    const blockBtns   = blockButtons.querySelectorAll('button');
+    const resetBtn    = document.getElementById('resetButton');
+    const msgInput    = document.getElementById('messageInput');
+    const cupSelect   = document.getElementById('targetCup');
+    const gameStatus  = document.getElementById('gameStatus');
+    const p1ScoreSpan = document.getElementById('player1Score');
+    const p2ScoreSpan = document.getElementById('player2Score');
+
+    // 4) State
+    let roomId, gameRef, role; // role: 'shooter' or 'blocker'
+
+    // 5) Create Room
+    createBtn.onclick = () => {
+      roomId = roomInput.value.trim();
+      if (!roomId) return alert('Enter a room code');
+      gameRef = db.ref(`games/${roomId}`);
+      gameRef.once('value', snap => {
+        if (snap.exists()) {
+          statusMsg.textContent = 'Room exists—choose another';
+          statusMsg.style.color='red';
+        } else {
+          // init game
+          gameRef.set({
+            p1:0, p2:0,
+            msg:'', target:'',
+            player1Id: clientId,
+            player2Id: ''
+          });
+          role = 'shooter';
+          startGame('Room created! You are Shooter. Wait for Blocker.');
+        }
+      });
+    };
+
+    // 6) Join Room
+    joinBtn.onclick = () => {
+      roomId = roomInput.value.trim();
+      if (!roomId) return alert('Enter a room code');
+      gameRef = db.ref(`games/${roomId}`);
+      gameRef.once('value', snap => {
+        const data = snap.val();
+        if (!data) {
+          statusMsg.textContent = 'Room not found';
+          statusMsg.style.color='red';
+        } else if (data.player2Id) {
+          statusMsg.textContent = 'Room full';
+          statusMsg.style.color='red';
+        } else {
+          // assign blocker
+          gameRef.update({ player2Id: clientId });
+          role = 'blocker';
+          startGame('Joined! You are Blocker. Wait for Shooter.');
+        }
+      });
+    };
+
+    // 7) Common start logic
+    function startGame(msg) {
+      statusMsg.textContent = msg;
+      statusMsg.style.color='green';
+      lobby.style.display='none';
+      gameArea.style.display='block';
+      renderUI();
+      // listen for state changes
+      gameRef.on('value', snap => {
+        const d = snap.val();
+        if (!d) return;
+        // update scores
+        p1ScoreSpan.textContent = d.p1;
+        p2ScoreSpan.textContent = d.p2;
+        // show last action
+        if (role==='blocker' && d.msg) {
+          gameStatus.textContent = `“If this goes in…” → ${d.msg}`;
+        } else {
+          gameStatus.textContent = `Scores updated`;
+        }
+      });
+    }
+
+    // 8) Show/hide UI per role
+    function renderUI() {
+      if (role==='shooter') {
+        shooterUI.style.display   = 'block';
+        blockButtons.style.display= 'none';
+      } else {
+        shooterUI.style.display   = 'none';
+        blockButtons.style.display= 'block';
+      }
+    }
+
+    // 9) Shooter action
+    shootBtn.onclick = () => {
+      const m = msgInput.value.trim();
+      const t = cupSelect.value;
+      if (!m) return alert('Type your “if this goes in…”');
+      gameRef.update({ msg:m, target:t });
+    };
+
+    // 10) Blocker action
+    blockBtns.forEach(btn=>{
+      btn.onclick = () => {
+        const guess = btn.dataset.guess;
+        gameRef.once('value', snap=>{
+          const d = snap.val();
+          const hit = (guess !== d.target);
+          // on hit, shooter scores; on block, blocker scores
+          const key = hit ? 'p1' : 'p2';
+          gameRef.child(key).set(firebase.database.ServerValue.increment(1));
+          // clear message for next round
+          gameRef.update({ msg:'', target:'' });
+        });
+      };
+    });
+
+    // 11) Reset
+    resetBtn.onclick = () => {
+      gameRef.once('value', snap=>{
+        const d = snap.val();
+        gameRef.set({
+          p1:0, p2:0,
+          msg:'', target:'',
+          player1Id: d.player1Id,
+          player2Id: d.player2Id
+        });
+      });
+    };
+  </script>
+</body>
+</html>
+
