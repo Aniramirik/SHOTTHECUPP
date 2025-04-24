@@ -1,226 +1,409 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>🎯 Cup Shot: Shooter vs Blocker</title>
+  <title>Guess the Cup</title>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
   <style>
-    body { font-family: Arial,sans-serif; display:flex;align-items:center;justify-content:center;
-           min-height:100vh;margin:0;background:#f4f4f9 }
-    .container { background:#fff; padding:20px; border-radius:8px;
-                 box-shadow:0 4px 12px rgba(0,0,0,0.1); width:320px; text-align:center }
-    input,select,button { width:100%; padding:10px; margin:8px 0; font-size:16px;
-                          border:1px solid #ddd; border-radius:4px; box-sizing:border-box }
-    button { background:#4CAF50; color:#fff; border:none; cursor:pointer; transition:.2s }
-    button:hover { background:#45a049 }
-    #gameArea { display:none; margin-top:10px }
-    #statusMessage { height:1.2em; color:green }
-    #gameStatus,#scores { margin:12px 0; font-weight:bold }
-    #blockButtons button { background:#2196F3 }
-    #blockButtons button:hover { background:#1976d2 }
+ /* Base Styles */
+/* Base Reset & Responsive Font */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%; /* Avoid font resizing on iPhones */
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: linear-gradient(145deg, #fdfbfb, #ebedee);
+  color: #222;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: 2rem 1rem;
+  line-height: 1.5;
+}
+
+/* Container */
+.container {
+  background: #fff;
+  border-radius: 24px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  padding: 2rem 2.5rem;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  animation: popIn 0.6s ease forwards;
+  transform: scale(0.95);
+}
+
+/* Headings */
+h1, h2, h3 {
+  font-weight: 800;
+  margin-bottom: 1rem;
+  letter-spacing: -0.5px;
+  color: #111;
+}
+
+/* Inputs & Buttons */
+input, select, button {
+  width: 100%;
+  padding: 1rem;
+  margin: 0.7rem 0;
+  border-radius: 12px;
+  border: 2px solid #ddd;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  font-family: inherit;
+  appearance: none;
+}
+
+input:focus, select:focus {
+  border-color: #5551ff;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(85, 81, 255, 0.2);
+}
+
+button {
+  background: #5551ff;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+  border: none;
+  transition: background 0.25s ease, transform 0.15s ease;
+}
+button:hover {
+  background: #3835cc;
+  transform: scale(1.02);
+}
+#resetBtn {
+  background: #ff4f4f;
+}
+#resetBtn:hover {
+  background: #e03939;
+}
+
+/* Game Area */
+#gameArea {
+  display: none;
+  margin-top: 1.5rem;
+}
+
+/* Feedback Text */
+#statusMsg, #gameStatus {
+  margin: 1rem 0;
+  font-weight: 600;
+  font-size: 1.05rem;
+  color: #444;
+}
+
+#scores {
+  margin: 1.2rem 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #222;
+}
+
+/* Shooter / Blocker UI */
+#shooterUI, #blockButtons {
+  margin: 1.3rem 0;
+}
+#blockButtons button {
+  background: #00bcd4;
+}
+#blockButtons button:hover {
+  background: #0097a7;
+}
+
+/* Chat */
+#chatBox {
+  background: #f9f9f9;
+  border: 1px solid #eee;
+  border-radius: 12px;
+  padding: 1rem;
+  max-height: 150px;
+  overflow-y: auto;
+  text-align: left;
+  font-size: 0.95rem;
+  margin-top: 1rem;
+  box-shadow: inset 0 0 10px rgba(0,0,0,0.03);
+}
+#typingIndicator {
+  font-size: 0.85rem;
+  color: #888;
+  font-style: italic;
+  margin-top: 0.5rem;
+}
+
+/* Pop In Animation */
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Responsive Media Query */
+@media (max-width: 480px) {
+  html {
+    font-size: 15px;
+  }
+
+  .container {
+    padding: 1.5rem 1.2rem;
+    border-radius: 20px;
+  }
+
+  h1 {
+    font-size: 1.6rem;
+  }
+
+  input, select, button {
+    padding: 0.9rem;
+    font-size: 0.95rem;
+  }
+
+  #chatBox {
+    font-size: 0.9rem;
+  }
+}
+
   </style>
 </head>
 <body>
-  <div class="container">
-    <!-- Lobby -->
-    <div id="lobby">
-      <h2>🏆 Cup Shot</h2>
-      <input id="roomCodeInput" placeholder="Room code…">
-      <button id="createRoomBtn">Create Room</button>
-      <button id="joinRoomBtn">Join Room</button>
-      <p id="statusMessage"></p>
-    </div>
 
-    <!-- Game Area -->
-    <div id="gameArea">
-      <p id="gameStatus">Waiting…</p>
+<h1>Guess the Cup Game</h1>
 
-      <!-- Shooter UI -->
-      <div id="shooterUI">
-        <input id="messageInput" placeholder="If this goes in…">
-        <select id="targetCup">
-          <option value="left">Left Cup</option>
-          <option value="right">Right Cup</option>
-        </select>
-        <button id="shootButton">Shoot!</button>
-      </div>
+<div id="lobby">
+  <input id="roomInput" placeholder="Room code">
+  <input id="nameInput" placeholder="Your name">
+  <button id="createBtn">Create Room</button>
+  <button id="joinBtn">Join Room</button>
+  <p id="statusMsg"></p>
+</div>
 
-      <!-- Blocker UI -->
-      <div id="blockButtons" style="display:none;">
-        <button data-guess="left">Block Left Cup</button>
-        <button data-guess="right">Block Right Cup</button>
-      </div>
-
-      <button id="resetButton" style="background:#FF5722;">Reset Game</button>
-
-      <div id="scores">
-        Player 1: <span id="player1Score">0</span> | Player 2: <span id="player2Score">0</span>
-      </div>
-    </div>
+<div id="gameArea">
+  <h2 id="gameStatus">Waiting for other player…</h2>
+  <div>
+    <span>Player 1: <span id="p1Score">0</span></span> |
+    <span>Player 2: <span id="p2Score">0</span></span>
   </div>
+  <div id="shooterUI" style="display:none;">
+    <input id="msgInput" placeholder="Your message">
+    <select id="cupSelect">
+      <option value="cup1">Cup 1</option>
+      <option value="cup2">Cup 2</option>
+      <option value="cup3">Cup 3</option>
+    </select>
+    <button id="shootBtn">Shoot!</button>
+  </div>
+  <div id="blockButtons" style="display:none;">
+    <button data-guess="cup1">Cup 1</button>
+    <button data-guess="cup2">Cup 2</button>
+    <button data-guess="cup3">Cup 3</button>
+  </div>
+  <button id="resetBtn">Reset</button>
 
-  <!-- Firebase compat -->
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
-  <script>
-    // 1) Init Firebase
-    const cfg = {
-      apiKey: "AIzaSyDEhC4JZ0zrt1ObPOQZgygFNWIJqvMVrCk",
-      authDomain: "web2web-be83b.firebaseapp.com",
-      databaseURL: "https://web2web-be83b-default-rtdb.europe-west1.firebasedatabase.app",
-      projectId: "web2web-be83b",
-      storageBucket: "web2web-be83b.firebasestorage.app",
-      messagingSenderId: "713313536557",
-      appId: "1:713313536557:web:a93adf1478d6cf76cc06a4",
-      measurementId: "G-PYV2XD9P8B"
-    };
-    firebase.initializeApp(cfg);
-    const db = firebase.database();
+  <div id="chat">
+    <h3>Chat</h3>
+    <div id="chatBox"></div>
+    <input id="chatInput" placeholder="Type a message...">
+    <button id="sendChatBtn">Send</button>
+    <div id="typingIndicator"></div>
+  </div>
+</div>
 
-    // 2) Client ID (to track role)
-    let clientId = localStorage.getItem('clientId');
-    if (!clientId) {
-      clientId = Date.now() + '_' + Math.random().toString(36).slice(2);
-      localStorage.setItem('clientId', clientId);
-    }
+<script>
+  const firebaseConfig = {
+  apiKey: "AIzaSyDEhC4JZ0zrt1ObPOQZgygFNWIJqvMVrCk",
+  authDomain: "web2web-be83b.firebaseapp.com",
+  databaseURL: "https://web2web-be83b-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "web2web-be83b",
+  storageBucket: "web2web-be83b.firebasestorage.app",
+  messagingSenderId: "713313536557",
+  appId: "1:713313536557:web:a93adf1478d6cf76cc06a4",
+  measurementId: "G-PYV2XD9P8B"
+};
 
-    // 3) DOM refs
-    const roomInput   = document.getElementById('roomCodeInput');
-    const createBtn   = document.getElementById('createRoomBtn');
-    const joinBtn     = document.getElementById('joinRoomBtn');
-    const statusMsg   = document.getElementById('statusMessage');
-    const lobby       = document.getElementById('lobby');
-    const gameArea    = document.getElementById('gameArea');
-    const shooterUI   = document.getElementById('shooterUI');
-    const blockButtons= document.getElementById('blockButtons');
-    const shootBtn    = document.getElementById('shootButton');
-    const blockBtns   = blockButtons.querySelectorAll('button');
-    const resetBtn    = document.getElementById('resetButton');
-    const msgInput    = document.getElementById('messageInput');
-    const cupSelect   = document.getElementById('targetCup');
-    const gameStatus  = document.getElementById('gameStatus');
-    const p1ScoreSpan = document.getElementById('player1Score');
-    const p2ScoreSpan = document.getElementById('player2Score');
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
 
-    // 4) State
-    let roomId, gameRef, role; // role: 'shooter' or 'blocker'
+  const roomInput = document.getElementById('roomInput');
+  const nameInput = document.getElementById('nameInput');
+  const createBtn = document.getElementById('createBtn');
+  const joinBtn = document.getElementById('joinBtn');
+  const statusMsg = document.getElementById('statusMsg');
+  const lobby = document.getElementById('lobby');
+  const gameArea = document.getElementById('gameArea');
+  const gameStatus = document.getElementById('gameStatus');
+  const p1ScoreSpan = document.getElementById('p1Score');
+  const p2ScoreSpan = document.getElementById('p2Score');
+  const shooterUI = document.getElementById('shooterUI');
+  const msgInput = document.getElementById('msgInput');
+  const cupSelect = document.getElementById('cupSelect');
+  const shootBtn = document.getElementById('shootBtn');
+  const blockButtons = document.getElementById('blockButtons');
+  const blockBtns = blockButtons.querySelectorAll('button');
+  const resetBtn = document.getElementById('resetBtn');
+  const chatBox = document.getElementById('chatBox');
+  const chatInput = document.getElementById('chatInput');
+  const sendChatBtn = document.getElementById('sendChatBtn');
+  const typingIndicator = document.getElementById('typingIndicator');
 
-    // 5) Create Room
-    createBtn.onclick = () => {
-      roomId = roomInput.value.trim();
-      if (!roomId) return alert('Enter a room code');
-      gameRef = db.ref(`games/${roomId}`);
-      gameRef.once('value', snap => {
-        if (snap.exists()) {
-          statusMsg.textContent = 'Room exists—choose another';
-          statusMsg.style.color='red';
-        } else {
-          // init game
-          gameRef.set({
-            p1:0, p2:0,
-            msg:'', target:'',
-            player1Id: clientId,
-            player2Id: ''
-          });
-          role = 'shooter';
-          startGame('Room created! You are Shooter. Wait for Blocker.');
-        }
-      });
-    };
+  let currentRoom, currentPlayerName;
+  const clientId = Math.random().toString(36).substring(2, 10);
 
-    // 6) Join Room
-    joinBtn.onclick = () => {
-      roomId = roomInput.value.trim();
-      if (!roomId) return alert('Enter a room code');
-      gameRef = db.ref(`games/${roomId}`);
-      gameRef.once('value', snap => {
-        const data = snap.val();
-        if (!data) {
-          statusMsg.textContent = 'Room not found';
-          statusMsg.style.color='red';
-        } else if (data.player2Id) {
-          statusMsg.textContent = 'Room full';
-          statusMsg.style.color='red';
-        } else {
-          // assign blocker
-          gameRef.update({ player2Id: clientId });
-          role = 'blocker';
-          startGame('Joined! You are Blocker. Wait for Shooter.');
-        }
-      });
-    };
+  function showStatus(msg) {
+    statusMsg.textContent = msg;
+  }
 
-    // 7) Common start logic
-    function startGame(msg) {
-      statusMsg.textContent = msg;
-      statusMsg.style.color='green';
-      lobby.style.display='none';
-      gameArea.style.display='block';
-      renderUI();
-      // listen for state changes
-      gameRef.on('value', snap => {
-        const d = snap.val();
-        if (!d) return;
-        // update scores
-        p1ScoreSpan.textContent = d.p1;
-        p2ScoreSpan.textContent = d.p2;
-        // show last action
-        if (role==='blocker' && d.msg) {
-          gameStatus.textContent = `“If this goes in…” → ${d.msg}`;
-        } else {
-          gameStatus.textContent = `Scores updated`;
-        }
-      });
-    }
+  function setupGame(roomCode, name, role) {
+    currentRoom = roomCode;
+    currentPlayerName = name;
+    lobby.style.display = 'none';
+    gameArea.style.display = 'block';
+    shootBtn.disabled = false;
+    gameStatus.textContent = `You are the ${role}`;
 
-    // 8) Show/hide UI per role
-    function renderUI() {
-      if (role==='shooter') {
-        shooterUI.style.display   = 'block';
-        blockButtons.style.display= 'none';
-      } else {
-        shooterUI.style.display   = 'none';
-        blockButtons.style.display= 'block';
-      }
-    }
+    shooterUI.style.display = role === 'shooter' ? 'block' : 'none';
+    blockButtons.style.display = role === 'blocker' ? 'flex' : 'none';
 
-    // 9) Shooter action
-    shootBtn.onclick = () => {
-      const m = msgInput.value.trim();
-      const t = cupSelect.value;
-      if (!m) return alert('Type your “if this goes in…”');
-      gameRef.update({ msg:m, target:t });
-    };
+    const gameRef = db.ref('games/' + roomCode);
 
-    // 10) Blocker action
-    blockBtns.forEach(btn=>{
-      btn.onclick = () => {
-        const guess = btn.dataset.guess;
-        gameRef.once('value', snap=>{
-          const d = snap.val();
-          const hit = (guess !== d.target);
-          // on hit, shooter scores; on block, blocker scores
-          const key = hit ? 'p1' : 'p2';
-          gameRef.child(key).set(firebase.database.ServerValue.increment(1));
-          // clear message for next round
-          gameRef.update({ msg:'', target:'' });
-        });
-      };
+    gameRef.on('value', snap => {
+      const data = snap.val();
+      if (!data) return;
+      p1ScoreSpan.textContent = data.scores?.player1 || 0;
+      p2ScoreSpan.textContent = data.scores?.player2 || 0;
+      if (data.result) gameStatus.textContent = data.result;
     });
 
-    // 11) Reset
-    resetBtn.onclick = () => {
-      gameRef.once('value', snap=>{
-        const d = snap.val();
-        gameRef.set({
-          p1:0, p2:0,
-          msg:'', target:'',
-          player1Id: d.player1Id,
-          player2Id: d.player2Id
+    db.ref(`games/${roomCode}/chat`).on('child_added', snap => {
+      const chat = snap.val();
+      const div = document.createElement('div');
+      div.textContent = `${chat.name}: ${chat.text}`;
+      chatBox.appendChild(div);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    });
+
+    db.ref(`games/${roomCode}/typing`).on('value', snap => {
+      const typing = snap.val();
+      if (typing && typing.name !== currentPlayerName) {
+        typingIndicator.textContent = `${typing.name} is typing...`;
+      } else {
+        typingIndicator.textContent = '';
+      }
+    });
+  }
+
+  createBtn.onclick = () => {
+    const code = roomInput.value.trim();
+    const name = nameInput.value.trim();
+    if (!code || !name) return showStatus("Fill in both fields");
+    const ref = db.ref('games/' + code);
+    ref.set({
+      players: {
+        player1: { name, id: clientId }
+      },
+      scores: {
+        player1: 0,
+        player2: 0
+      }
+    });
+    setupGame(code, name, 'shooter');
+  };
+
+  joinBtn.onclick = () => {
+    const code = roomInput.value.trim();
+    const name = nameInput.value.trim();
+    if (!code || !name) return showStatus("Fill in both fields");
+    const ref = db.ref('games/' + code);
+    ref.once('value', snap => {
+      const data = snap.val();
+      if (!data || data.players?.player2) return showStatus("Room full or not found");
+      ref.child('players/player2').set({ name, id: clientId });
+      setupGame(code, name, 'blocker');
+    });
+  };
+
+  shootBtn.onclick = () => {
+    const msg = msgInput.value.trim();
+    const cup = cupSelect.value;
+    if (!msg) return alert("Enter a message!");
+    db.ref(`games/${currentRoom}`).update({
+      shoot: { cup, msg }
+    });
+    gameStatus.textContent = "Waiting for blocker…";
+  };
+
+  blockBtns.forEach(btn => {
+    btn.onclick = () => {
+      const guess = btn.dataset.guess;
+      const gameRef = db.ref('games/' + currentRoom);
+      gameRef.once('value', snap => {
+        const data = snap.val();
+        if (!data || !data.shoot) return;
+        const correct = guess !== data.shoot.cup;
+        const winner = correct ? 'Shooter scores!' : 'Blocked!';
+        gameStatus.textContent = winner;
+
+        const scores = data.scores || { player1: 0, player2: 0 };
+        if (correct) scores.player1 += 1;
+        else scores.player2 += 1;
+
+        gameRef.update({
+          result: `${winner} — "${data.shoot.msg}"`,
+          scores,
+          shoot: null
         });
       });
     };
-  </script>
+  });
+
+  resetBtn.onclick = () => {
+    db.ref(`games/${currentRoom}`).update({
+      shoot: null,
+      result: null
+    });
+    gameStatus.textContent = `You are the ${shooterUI.style.display === 'block' ? 'shooter' : 'blocker'}`;
+  };
+
+  sendChatBtn.onclick = () => {
+    const txt = chatInput.value.trim();
+    if (!txt) return;
+    db.ref(`games/${currentRoom}/chat`).push({
+      name: currentPlayerName,
+      text: txt
+    });
+    chatInput.value = '';
+    db.ref(`games/${currentRoom}/typing`).set(null);
+  };
+
+  let typingTimeout;
+  chatInput.addEventListener('input', () => {
+    db.ref(`games/${currentRoom}/typing`).set({
+      name: currentPlayerName
+    });
+
+    clearTimeout(typingTimeout);
+    typingTimeout = setTimeout(() => {
+      db.ref(`games/${currentRoom}/typing`).set(null);
+    }, 2000);
+  });
+</script>
+
 </body>
 </html>
-
